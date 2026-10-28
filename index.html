@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>自定义导航页</title>
+<style>
+:root{
+  --columns:5;
+  --icon-size:54px;
+  --gap-x:14px;
+  --gap-y:22px;
+  --label-display:block;
+  --text-color:#fff;
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#171717;color:var(--text-color);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+body{overscroll-behavior:none;touch-action:pan-y}
+#wallpaper{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:linear-gradient(135deg,#30343b,#111)}
+#shade{position:fixed;inset:0;z-index:1;background:rgba(0,0,0,0);pointer-events:none}
+#viewport{position:fixed;inset:0;z-index:2;overflow:hidden;touch-action:pan-y}
+#pages{height:100%;display:flex;will-change:transform;transition:transform .24s ease;touch-action:pan-y}
+.page{flex:0 0 100%;width:100%;height:100%;padding:calc(env(safe-area-inset-top) + 14px) 12px calc(env(safe-area-inset-bottom) + 18px);display:flex;align-items:flex-start;justify-content:flex-start;overflow:hidden}
+.grid{width:100%;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));column-gap:var(--gap-x);row-gap:var(--gap-y);align-content:start}
+.tile{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;user-select:none;-webkit-user-select:none;touch-action:pan-y;cursor:pointer}
+.icon{width:var(--icon-size);height:var(--icon-size);max-width:100%;flex:none;border-radius:23%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.16);color:#fff;font-size:calc(var(--icon-size)*.42);font-weight:650}
+.icon img{width:100%;height:100%;object-fit:cover}
+.label{display:var(--label-display);width:100%;margin-top:6px;font-size:12px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-color);text-shadow:0 1px 4px rgba(0,0,0,.65)}
+.tile.settings-tile .icon,.tile.add-tile .icon{background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.42);font-size:calc(var(--icon-size)*.5)}
+.tile.dragging{opacity:.45}
+.tile.drop-target .icon{outline:2px solid rgba(255,255,255,.9);outline-offset:3px}
+#dots{position:fixed;z-index:4;bottom:calc(env(safe-area-inset-bottom) + 7px);left:0;right:0;display:flex;justify-content:center;gap:6px;pointer-events:none}
+.dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.42)}
+.dot.active{background:#fff}
+dialog{width:min(92vw,400px);max-height:86dvh;overflow:auto;padding:0;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:rgba(27,29,33,.97);color:white;font:inherit}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.panel{padding:20px}
+.panel h2{font-size:18px;margin:0 0 18px;font-weight:650}
+.field{display:block;margin:14px 0;font-size:13px;color:rgba(255,255,255,.82)}
+.field input:not([type=checkbox]):not([type=range]):not([type=file]),.field select{display:block;width:100%;margin-top:7px;padding:11px 12px;border:1px solid rgba(255,255,255,.18);border-radius:11px;background:#25282d;color:white;font:inherit}
+.field input[type=range]{display:block;width:100%;margin-top:10px;accent-color:white}
+.field input[type=file]{display:block;width:100%;margin-top:8px;font-size:12px}
+.field input[type=checkbox]{width:18px;height:18px;vertical-align:middle;accent-color:white}
+.range-line{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.range-line output{font-size:12px;color:rgba(255,255,255,.7)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+button{font:inherit;color:white;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.09);padding:10px 14px;border-radius:11px;cursor:pointer}
+button.primary{background:rgba(255,255,255,.2)}
+button.danger{margin-right:auto;background:rgba(255,70,70,.14)}
+#linkDialog .panel{padding:20px}
+@media(max-width:340px){.page{padding-left:8px;padding-right:8px}.label{font-size:11px}}
+</style>
+</head>
+<body>
+<img id="wallpaper" alt="">
+<div id="shade"></div>
+<div id="viewport"><div id="pages"></div></div>
+<div id="dots"></div>
+
+<dialog id="settingsDialog">
+<form class="panel" id="settingsForm">
+<h2>设置</h2>
+<label class="field">壁纸<input id="wallpaperInput" type="file" accept="image/*"></label>
+<div class="range-line"><label class="field" style="flex:1">图标大小<output id="sizeOut">54 px</output><input id="sizeInput" type="range" min="28" max="100" value="54"></label></div>
+<label class="field"><input id="labelsInput" type="checkbox" checked> 显示网站名</label>
+<div class="pair">
+<label class="field">左右间隔<output id="gapXOut">14 px</output><input id="gapXInput" type="range" min="0" max="32" value="14"></label>
+<label class="field">上下间隔<output id="gapYOut">22 px</output><input id="gapYInput" type="range" min="0" max="48" value="22"></label>
+</div>
+<label class="field">每行图标数量 <output id="columnsOut">5</output><input id="columnsInput" type="range" min="2" max="8" value="5"></label>
+<div class="actions"><button type="button" id="removeWallpaper" class="danger">移除壁纸</button><button type="button" data-close="settingsDialog">取消</button><button class="primary" type="submit">保存</button></div>
+</form>
+</dialog>
+
+<dialog id="linkDialog">
+<form class="panel" id="linkForm">
+<h2 id="linkHeading">添加</h2>
+<label class="field">名称<input id="nameInput" required maxlength="50" autocomplete="off"></label>
+<label class="field">网址<input id="urlInput" required type="url" inputmode="url" placeholder="https://example.com" autocomplete="url"></label>
+<label class="field">图标网址（可选）<input id="iconInput" type="url" inputmode="url" placeholder="https://example.com/icon.png"></label>
+<div class="actions"><button type="button" id="deleteLink" class="danger">删除</button><button type="button" data-close="linkDialog">取消</button><button class="primary" type="submit">保存</button></div>
+</form>
+</dialog>
+
+<input type="file" id="quickWallpaper" accept="image/*" hidden>
+<script>
+(()=>{
+const KEY='bare-grid-home-v2';
+const base={items:[],wallpaper:'',size:54,labels:true,gapX:14,gapY:22,columns:5};
+let state=read(),currentPage=0,editingId=null,pendingWallpaper=null;
+const $=id=>document.getElementById(id);
+const uid=()=>globalThis.crypto?.randomUUID?.()||('id-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+function read(){try{return {...base,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return {...base}}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{alert('保存失败。壁纸可能过大，请换一张较小的图片。')}}
+function validUrl(s){try{const u=new URL(s);return ['http:','https:'].includes(u.protocol)?u.href:''}catch{return ''}}
+function favicon(item){if(item.icon&&validUrl(item.icon))return validUrl(item.icon);try{return 'https://www.google.com/s2/favicons?sz=128&domain_url='+encodeURIComponent(new URL(item.url).origin)}catch{return ''}}
+function compress(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onerror=reject;r.onload=()=>{const im=new Image();im.onerror=reject;im.onload=()=>{const scale=Math.min(1,1800/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*scale);c.height=Math.round(im.height*scale);c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.82))};im.src=r.result};r.readAsDataURL(file)})}
+function applyStyle(){
+document.documentElement.style.setProperty('--columns',state.columns);
+document.documentElement.style.setProperty('--icon-size',state.size+'px');
+document.documentElement.style.setProperty('--gap-x',state.gapX+'px');
+document.documentElement.style.setProperty('--gap-y',state.gapY+'px');
+document.documentElement.style.setProperty('--label-display',state.labels?'block':'none');
+$('wallpaper').src=state.wallpaper||'';
+$('wallpaper').style.display=state.wallpaper?'block':'none';
+}
+function makeTile(item){
+const tile=document.createElement('div');tile.className='tile';tile.dataset.id=item.id;tile.draggable=true;
+const icon=document.createElement('div');icon.className='icon';
+const letter=document.createElement('span');letter.textContent=(item.name||'?').trim().slice(0,1).toUpperCase();icon.appendChild(letter);
+const imgUrl=favicon(item);
+if(imgUrl){const im=new Image();im.alt='';im.src=imgUrl;im.onload=()=>{icon.replaceChildren(im)}}
+const label=document.createElement('span');label.className='label';label.textContent=item.name||'';
+tile.append(icon,label);
+tile.addEventListener('click',()=>{if(tile.dataset.moved==='1'){tile.dataset.moved='0';return}location.href=item.url});
+tile.addEventListener('contextmenu',e=>{e.preventDefault();openLink(item.id)});
+tile.addEventListener('dragstart',e=>{tile.classList.add('dragging');e.dataTransfer.setData('text/plain',item.id);e.dataTransfer.effectAllowed='move'});
+tile.addEventListener('dragend',()=>{tile.classList.remove('dragging');document.querySelectorAll('.drop-target').forEach(n=>n.classList.remove('drop-target'))});
+tile.addEventListener('dragover',e=>{e.preventDefault();tile.classList.add('drop-target')});
+tile.addEventListener('dragleave',()=>tile.classList.remove('drop-target'));
+tile.addEventListener('drop',e=>{e.preventDefault();tile.classList.remove('drop-target');const from=e.dataTransfer.getData('text/plain');reorder(from,item.id)});
+let pressTimer=null,longPressed=false,startX=0,startY=0,moved=false;
+tile.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;longPressed=false;moved=false;startX=e.clientX;startY=e.clientY;pressTimer=setTimeout(()=>{longPressed=true;openLink(item.id)},550)});
+tile.addEventListener('pointermove',e=>{if(Math.abs(e.clientX-startX)>8||Math.abs(e.clientY-startY)>8){moved=true;clearTimeout(pressTimer)}});
+tile.addEventListener('pointerup',()=>{clearTimeout(pressTimer);if(moved)tile.dataset.moved='1'});
+tile.addEventListener('pointercancel',()=>clearTimeout(pressTimer));
+return tile;
+}
+function makeAddTile(){
+const tile=document.createElement('div');tile.className='tile add-tile';tile.innerHTML='<div class="icon">+</div><span class="label"></span>';tile.querySelector('.label').textContent='';
+tile.addEventListener('click',()=>openLink(null));return tile;
+}
+function makeSettingsTile(){
+const tile=document.createElement('div');tile.className='tile settings-tile';tile.innerHTML='<div class="icon">⚙</div><span class="label"></span>';tile.querySelector('.label').textContent='';
+tile.addEventListener('click',openSettings);return tile;
+}
+function render(){
+applyStyle();
+const pages=$('pages'),dots=$('dots');pages.innerHTML='';dots.innerHTML='';
+const perPage=Math.max(1,Number(state.columns)*rowsPerPage());
+const allTiles=[...state.items,{id:'__add__',add:true},{id:'__settings__',settings:true}];
+const chunks=[];
+for(let i=0;i<allTiles.length;i+=perPage)chunks.push(allTiles.slice(i,i+perPage));
+if(!chunks.length)chunks.push([{id:'__add__',add:true},{id:'__settings__',settings:true}]);
+
+chunks.forEach((chunk,idx)=>{
+const page=document.createElement('section');page.className='page';
+const grid=document.createElement('div');grid.className='grid';
+chunk.forEach(item=>{
+if(item.add)grid.appendChild(makeAddTile());
+else if(item.settings)grid.appendChild(makeSettingsTile());
+else grid.appendChild(makeTile(item));
+});
+page.appendChild(grid);pages.appendChild(page);
+const dot=document.createElement('span');dot.className='dot'+(idx===currentPage?' active':'');dots.appendChild(dot);
+});
+currentPage=Math.min(currentPage,chunks.length-1);
+updatePage(false);
+}
+function rowsPerPage(){
+const h=window.innerHeight||innerHeight;
+const top=parseFloat(getComputedStyle(document.querySelector('.page')||document.body).paddingTop)||14;
+const bottom=parseFloat(getComputedStyle(document.querySelector('.page')||document.body).paddingBottom)||18;
+const usable=h-top-bottom;
+const itemH=Number(state.size)+(state.labels?22:0)+Number(state.gapY);
+return Math.max(1,Math.floor((usable+Number(state.gapY))/Math.max(1,itemH)));
+}
+function updatePage(animate=true){
+$('pages').style.transition=animate?'transform .24s ease':'none';
+$('pages').style.transform=`translateX(${-currentPage*100}%)`;
+[...$('dots').children].forEach((d,i)=>d.classList.toggle('active',i===currentPage));
+}
+function reorder(from,to){
+if(!from||from===to||from==='__settings__'||to==='__settings__'||from==='__add__'||to==='__add__')return;
+const a=state.items.findIndex(x=>x.id===from),b=state.items.findIndex(x=>x.id===to);
+if(a<0||b<0)return;
+const [item]=state.items.splice(a,1);state.items.splice(b,0,item);save();render();
+}
+function openSettings(){
+$('sizeInput').value=state.size;$('labelsInput').checked=state.labels;$('gapXInput').value=state.gapX;$('gapYInput').value=state.gapY;$('columnsInput').value=state.columns;
+syncRange();pendingWallpaper=null;$('wallpaperInput').value='';$('settingsDialog').showModal();
+}
+function syncRange(){
+$('sizeOut').textContent=$('sizeInput').value+' px';
+$('gapXOut').textContent=$('gapXInput').value+' px';
+$('gapYOut').textContent=$('gapYInput').value+' px';
+$('columnsOut').textContent=$('columnsInput').value;
+}
+['sizeInput','gapXInput','gapYInput','columnsInput'].forEach(id=>$(id).addEventListener('input',syncRange));
+$('wallpaperInput').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{pendingWallpaper=await compress(f)}catch{alert('图片读取失败')}});
+$('settingsForm').addEventListener('submit',e=>{
+e.preventDefault();state.size=+$('sizeInput').value;state.labels=$('labelsInput').checked;state.gapX=+$('gapXInput').value;state.gapY=+$('gapYInput').value;state.columns=+$('columnsInput').value;if(pendingWallpaper)state.wallpaper=pendingWallpaper;save();$('settingsDialog').close();render();
+});
+$('removeWallpaper').addEventListener('click',()=>{state.wallpaper='';pendingWallpaper=null;$('wallpaperInput').value='';$('wallpaper').removeAttribute('src');$('wallpaper').style.display='none'});
+function openLink(id){
+editingId=id;const item=state.items.find(x=>x.id===id);
+$('linkHeading').textContent=item?'编辑':'添加';
+$('nameInput').value=item?.name||'';$('urlInput').value=item?.url||'';$('iconInput').value=item?.icon||'';
+$('deleteLink').style.display=item?'block':'none';$('linkDialog').showModal();
+}
+$('linkForm').addEventListener('submit',e=>{
+e.preventDefault();const name=$('nameInput').value.trim(),url=validUrl($('urlInput').value.trim()),rawIcon=$('iconInput').value.trim(),icon=rawIcon?validUrl(rawIcon):'';
+if(!name||!url){alert('请填写名称和有效网址');return}if(rawIcon&&!icon){alert('图标网址无效');return}
+if(editingId){const it=state.items.find(x=>x.id===editingId);if(it)Object.assign(it,{name,url,icon})}
+else state.items.push({id:uid(),name,url,icon});
+save();$('linkDialog').close();render();
+});
+$('deleteLink').addEventListener('click',()=>{if(!editingId)return;state.items=state.items.filter(x=>x.id!==editingId);save();$('linkDialog').close();render()});
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).close()));
+let sx=0,sy=0,st=0;
+$('viewport').addEventListener('touchstart',e=>{if(e.touches.length!==1)return;sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now()},{passive:true});
+$('viewport').addEventListener('touchend',e=>{
+if(!e.changedTouches.length)return;const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
+if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.25&&Date.now()-st<900){
+const count=$('pages').children.length;
+if(dx<0&&currentPage<count-1){currentPage++;updatePage()}
+else if(dx>0&&currentPage>0){currentPage--;updatePage()}
+}
+},{passive:true});
+window.addEventListener('resize',()=>{const old=currentPage;render();currentPage=Math.min(old,$('pages').children.length-1);updatePage(false)});
+$('wallpaper').addEventListener('error',()=>{if(state.wallpaper){$('wallpaper').style.display='none'}});
+render();
+})();
+</script>
+</body>
+</html>
